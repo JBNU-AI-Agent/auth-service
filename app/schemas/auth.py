@@ -55,3 +55,8 @@ class ClientResponse(BaseModel):
     client_type: ClientType
     scopes: List[str]
     is_active: bool
+
+
+class ClientUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    scopes: Optional[List[str]] = None

@@ -57,3 +57,31 @@ class ClientRepository:
             doc["_id"] = str(doc["_id"])
             clients.append(ClientInDB(**doc))
         return clients
+
+    @classmethod
+    async def update(
+        cls,
+        client_id: str,
+        name: Optional[str] = None,
+        scopes: Optional[list[str]] = None
+    ) -> Optional[ClientInDB]:
+        update_fields = {"updated_at": datetime.utcnow()}
+
+        if name is not None:
+            update_fields["name"] = name
+        if scopes is not None:
+            update_fields["scopes"] = scopes
+
+        result = await cls._collection().update_one(
+            {"client_id": client_id, "is_active": True},
+            {"$set": update_fields}
+        )
+
+        if result.modified_count > 0:
+            return await cls.get_by_client_id(client_id)
+        return None
+
+    @classmethod
+    async def delete(cls, client_id: str) -> bool:
+        """Client 삭제 (soft delete)"""
+        return await cls.deactivate(client_id)

@@ -54,7 +54,11 @@ authentic/
 │   ├── core/
 │   │   ├── database.py      # MongoDB 연결
 │   │   ├── jwt.py           # JWT 발급/검증
-│   │   └── security.py      # RSA 키, 해싱
+│   │   ├── security.py      # RSA 키, 해싱
+│   │   ├── dependencies.py  # FastAPI 의존성 주입
+│   │   ├── exceptions.py    # 커스텀 예외
+│   │   ├── logging.py       # 인증 이벤트 로깅
+│   │   └── rate_limit.py    # Rate Limiting
 │   ├── models/
 │   │   ├── user.py          # 유저 모델
 │   │   ├── token.py         # 토큰 모델
@@ -89,6 +93,8 @@ authentic/
 | POST | `/auth/token` | Client 토큰 발급 | - |
 | POST | `/auth/clients` | Client 등록 | admin |
 | GET | `/auth/clients` | Client 목록 조회 | admin |
+| PATCH | `/auth/clients/{client_id}` | Client 수정 | admin |
+| DELETE | `/auth/clients/{client_id}` | Client 삭제 | admin |
 
 ### 공개키
 
@@ -144,7 +150,22 @@ uv run uvicorn app.main:app --reload
 
 # API 문서
 open http://localhost:8000/docs
+
+# 테스트 실행
+uv run pytest tests/ -v
 ```
+
+## Rate Limiting
+
+API 요청 제한이 적용됩니다:
+
+| 엔드포인트 | 제한 |
+|-----------|------|
+| 로그인 시도 | 분당 5회 |
+| 토큰 발급/갱신 | 분당 10회 |
+| Client 인증 | 분당 20회 |
+
+제한 초과 시 `429 Too Many Requests` 응답
 
 ## 사용 예시
 
