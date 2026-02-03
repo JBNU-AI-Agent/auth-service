@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from fastapi.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 
@@ -8,33 +7,19 @@ from app.schemas.auth import (
     TokenResponse,
     RefreshRequest,
     UserResponse,
-    ClientCredentialsRequest,
-    ClientRegisterRequest,
-    ClientRegisterResponse,
-    ClientResponse,
-    ClientTokenResponse,
-    ClientUpdateRequest,
 )
 from app.services.auth import AuthService
-from app.services.client import ClientService
-from app.core.jwt import decode_access_token, create_client_access_token
-from app.core.dependencies import get_current_user, get_current_user_db, require_admin
+from app.core.dependencies import get_current_user, get_current_user_db
 from app.core.exceptions import (
     InvalidCredentialsException,
     InvalidEmailDomainException,
-    ClientNotFoundException,
 )
 from app.core.logging import (
     log_login,
     log_logout,
     log_token_refresh,
-    log_client_auth,
-    log_client_register,
 )
 from app.core.rate_limit import rate_limiter, RateLimitConfig
-from app.repositories.user import UserRepository
-from app.repositories.client import ClientRepository
-from app.models.client import ClientCreate
 from app.models.user import UserInDB
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -153,115 +138,3 @@ async def get_me(current_user: UserInDB = Depends(get_current_user_db)):
     )
 
 
-# ==================== Client Credentials ====================
-
-@router.post("/token", response_model=ClientTokenResponse)
-async def client_credentials_token(body: ClientCredentialsRequest, request: Request):
-    """
-    Client Credentials Grant - MCP/Agent용 토큰 발급
-    """
-    ip = get_client_ip(request)
-    rate_limiter.check_rate_limit(request, "client_auth", **RateLimitConfig.CLIENT_AUTH)
-
-    client = await ClientService.authenticate_client(
-        client_id=body.client_id,
-        client_secret=body.client_secret
-    )
-
-    if not client:
-        log_client_auth(body.client_id, ip=ip, success=False)
-        raise InvalidCredentialsException("Invalid client credentials")
-
-    access_token = create_client_access_token(
-        client_id=client.client_id,
-        client_type=client.client_type.value,
-        scopes=client.scopes
-    )
-
-    log_client_auth(client.client_id, ip=ip, success=True)
-
-    return ClientTokenResponse(
-        access_token=access_token,
-        expires_in=settings.access_token_expire_minutes * 60
-    )
-
-
-# ==================== Client Management (Admin) ====================
-
-@router.post("/clients", response_model=ClientRegisterResponse)
-async def register_client(
-    body: ClientRegisterRequest,
-    admin: dict = Depends(require_admin)
-):
-    """새 클라이언트(MCP서버/Agent) 등록"""
-    client_create = ClientCreate(
-        name=body.name,
-        client_type=body.client_type,
-        scopes=body.scopes
-    )
-
-    client, client_secret = await ClientService.register_client(client_create)
-    log_client_register(client.client_id, client.name, admin["sub"])
-
-    return ClientRegisterResponse(
-        client_id=client.client_id,
-        client_secret=client_secret,
-        name=client.name,
-        client_type=client.client_type,
-        scopes=client.scopes
-    )
-
-
-@router.get("/clients", response_model=list[ClientResponse])
-async def list_clients(admin: dict = Depends(require_admin)):
-    """등록된 클라이언트 목록 조회"""
-    clients = await ClientRepository.list_all()
-    return [
-        ClientResponse(
-            client_id=c.client_id,
-            name=c.name,
-            client_type=c.client_type,
-            scopes=c.scopes,
-            is_active=c.is_active
-        )
-        for c in clients
-    ]
-
-
-@router.patch("/clients/{client_id}", response_model=ClientResponse)
-async def update_client(
-    client_id: str,
-    body: ClientUpdateRequest,
-    admin: dict = Depends(require_admin)
-):
-    """클라이언트 정보 수정"""
-    client = await ClientRepository.update(
-        client_id=client_id,
-        name=body.name,
-        scopes=body.scopes
-    )
-
-    if not client:
-        raise ClientNotFoundException()
-
-    return ClientResponse(
-        client_id=client.client_id,
-        name=client.name,
-        client_type=client.client_type,
-        scopes=client.scopes,
-        is_active=client.is_active
-    )
-
-
-@router.delete("/clients/{client_id}")
-async def delete_client(
-    client_id: str,
-    admin: dict = Depends(require_admin)
-):
-    """클라이언트 삭제"""
-    deleted = await ClientRepository.delete(client_id)
-
-    if not deleted:
-        raise ClientNotFoundException()
-
-    return {"message": "Client deleted", "client_id": client_id}

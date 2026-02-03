@@ -1,4 +1,5 @@
 import hashlib
+import os
 import secrets
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
@@ -38,6 +39,14 @@ def generate_rsa_keys():
 
 
 def load_private_key() -> str:
+    """
+    Private key 로드
+    1순위: JWT_PRIVATE_KEY 환경 변수
+    2순위: keys/private_key.pem 파일 (없으면 자동 생성)
+    """
+    if os.environ.get("JWT_PRIVATE_KEY"):
+        return os.environ["JWT_PRIVATE_KEY"]
+
     key_path = KEYS_DIR / "private_key.pem"
     if not key_path.exists():
         generate_rsa_keys()
@@ -45,6 +54,14 @@ def load_private_key() -> str:
 
 
 def load_public_key() -> str:
+    """
+    Public key 로드
+    1순위: JWT_PUBLIC_KEY 환경 변수
+    2순위: keys/public_key.pem 파일 (없으면 자동 생성)
+    """
+    if os.environ.get("JWT_PUBLIC_KEY"):
+        return os.environ["JWT_PUBLIC_KEY"]
+
     key_path = KEYS_DIR / "public_key.pem"
     if not key_path.exists():
         generate_rsa_keys()

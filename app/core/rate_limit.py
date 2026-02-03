@@ -86,8 +86,5 @@ class RateLimitConfig:
     # 로그인 시도: 분당 5회
     LOGIN = {"max_requests": 5, "window_seconds": 60}
 
-    # Client 인증: 분당 20회
-    CLIENT_AUTH = {"max_requests": 20, "window_seconds": 60}
-
     # 일반 API: 분당 100회
     API = {"max_requests": 100, "window_seconds": 60}

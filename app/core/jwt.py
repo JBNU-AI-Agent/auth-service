@@ -32,30 +32,6 @@ def create_access_token(
     return jwt.encode(payload, private_key, algorithm=settings.jwt_algorithm)
 
 
-def create_client_access_token(
-    client_id: str,
-    client_type: str,
-    scopes: list[str],
-    expires_delta: Optional[timedelta] = None
-) -> str:
-    """Client Credentials용 토큰 생성"""
-    if expires_delta is None:
-        expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
-
-    expire = datetime.utcnow() + expires_delta
-    payload = {
-        "sub": client_id,
-        "client_type": client_type,
-        "scopes": scopes,
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "type": "client_credentials"
-    }
-
-    private_key = load_private_key()
-    return jwt.encode(payload, private_key, algorithm=settings.jwt_algorithm)
-
-
 def decode_access_token(token: str) -> Optional[dict]:
     try:
         public_key = load_public_key()

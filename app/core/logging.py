@@ -66,14 +66,3 @@ def log_token_refresh(user_id: str, success: bool = True):
     log_auth_event("TOKEN_REFRESH", user_id=user_id, success=success)
 
 
-def log_client_auth(client_id: str, ip: Optional[str] = None, success: bool = True):
-    log_auth_event("CLIENT_AUTH", client_id=client_id, ip_address=ip, success=success)
-
-
-def log_client_register(client_id: str, name: str, admin_id: str):
-    log_auth_event(
-        "CLIENT_REGISTER",
-        client_id=client_id,
-        user_id=admin_id,
-        detail=f"name={name}"
-    )

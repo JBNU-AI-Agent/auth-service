@@ -49,14 +49,6 @@ class RateLimitExceededException(AuthException):
         )
 
 
-class ClientNotFoundException(AuthException):
-    def __init__(self):
-        super().__init__(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Client not found",
-        )
-
-
 class UserNotFoundException(AuthException):
     def __init__(self):
         super().__init__(
