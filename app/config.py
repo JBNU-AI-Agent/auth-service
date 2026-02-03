@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "RS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+    jwt_private_key: Optional[str] = None
+    jwt_public_key: Optional[str] = None
 
     # Server
     allowed_email_domain: str = "jbnu.ac.kr"
