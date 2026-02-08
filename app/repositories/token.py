@@ -1,11 +1,12 @@
 from typing import Optional
 from datetime import datetime
-from bson import ObjectId
+
 from app.core.database import get_db
 from app.models.token import RefreshTokenCreate, RefreshTokenInDB
+from app.repositories.base import BaseRepository
 
 
-class RefreshTokenRepository:
+class RefreshTokenRepository(BaseRepository):
     @staticmethod
     def _collection():
         return get_db().refresh_tokens
@@ -27,10 +28,7 @@ class RefreshTokenRepository:
             "token_hash": token_hash,
             "revoked": False
         })
-        if doc:
-            doc["_id"] = str(doc["_id"])
-            return RefreshTokenInDB(**doc)
-        return None
+        return cls._doc_to_model(doc, RefreshTokenInDB)
 
     @classmethod
     async def revoke(cls, token_hash: str) -> bool:

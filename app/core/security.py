@@ -1,10 +1,12 @@
 import hashlib
-import os
 import secrets
+from functools import lru_cache
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
+
+from app.config import settings
 
 KEYS_DIR = Path(__file__).parent.parent.parent / "keys"
 
@@ -35,17 +37,16 @@ def generate_rsa_keys():
     )
     (KEYS_DIR / "public_key.pem").write_bytes(public_pem)
 
-    print(f"Keys generated at {KEYS_DIR}")
 
-
+@lru_cache(maxsize=1)
 def load_private_key() -> str:
     """
-    Private key 로드
-    1순위: JWT_PRIVATE_KEY 환경 변수
+    Private key 로드 (최초 1회만 읽고 캐싱)
+    1순위: settings.jwt_private_key (환경 변수)
     2순위: keys/private_key.pem 파일 (없으면 자동 생성)
     """
-    if os.environ.get("JWT_PRIVATE_KEY"):
-        return os.environ["JWT_PRIVATE_KEY"]
+    if settings.jwt_private_key:
+        return settings.jwt_private_key
 
     key_path = KEYS_DIR / "private_key.pem"
     if not key_path.exists():
@@ -53,14 +54,15 @@ def load_private_key() -> str:
     return key_path.read_text()
 
 
+@lru_cache(maxsize=1)
 def load_public_key() -> str:
     """
-    Public key 로드
-    1순위: JWT_PUBLIC_KEY 환경 변수
+    Public key 로드 (최초 1회만 읽고 캐싱)
+    1순위: settings.jwt_public_key (환경 변수)
     2순위: keys/public_key.pem 파일 (없으면 자동 생성)
     """
-    if os.environ.get("JWT_PUBLIC_KEY"):
-        return os.environ["JWT_PUBLIC_KEY"]
+    if settings.jwt_public_key:
+        return settings.jwt_public_key
 
     key_path = KEYS_DIR / "public_key.pem"
     if not key_path.exists():

@@ -1,5 +1,15 @@
+from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
+
+
+class ErrorResponse(BaseModel):
+    timestamp: str
+    path: str
+    status: int
+    code: str
+    message: str
+    details: Optional[dict[str, Any]] = None
 
 
 class TokenResponse(BaseModel):

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, Request
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 
 from app.config import settings
 from app.schemas.auth import (
+    ErrorResponse,
     TokenResponse,
     RefreshRequest,
     UserResponse,
@@ -11,8 +12,8 @@ from app.schemas.auth import (
 from app.services.auth import AuthService
 from app.core.dependencies import get_current_user, get_current_user_db
 from app.core.exceptions import (
-    InvalidCredentialsException,
-    InvalidEmailDomainException,
+    AuthException,
+    OAuthFailedException,
 )
 from app.core.logging import (
     log_login,
@@ -41,9 +42,21 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+# Swagger 에러 응답 정의
+_error_responses = {
+    400: {"description": "Bad Request", "model": ErrorResponse},
+    401: {"description": "Unauthorized", "model": ErrorResponse},
+    403: {"description": "Forbidden", "model": ErrorResponse},
+    404: {"description": "Not Found", "model": ErrorResponse},
+    422: {"description": "Validation Error", "model": ErrorResponse},
+    429: {"description": "Too Many Requests", "model": ErrorResponse},
+    500: {"description": "Internal Server Error", "model": ErrorResponse},
+}
+
+
 # ==================== Google OAuth ====================
 
-@router.get("/google")
+@router.get("/google", responses={429: _error_responses[429], 500: _error_responses[500]})
 async def google_login(request: Request):
     """Google OAuth 로그인 시작"""
     rate_limiter.check_rate_limit(request, "login", **RateLimitConfig.LOGIN)
@@ -53,7 +66,15 @@ async def google_login(request: Request):
     )
 
 
-@router.get("/google/callback")
+@router.get(
+    "/google/callback",
+    responses={
+        400: _error_responses[400],
+        403: _error_responses[403],
+        429: _error_responses[429],
+        500: _error_responses[500],
+    },
+)
 async def google_callback(request: Request):
     """Google OAuth 콜백"""
     ip = get_client_ip(request)
@@ -62,28 +83,15 @@ async def google_callback(request: Request):
         token = await oauth.google.authorize_access_token(request)
     except Exception as e:
         log_login("unknown", ip=ip, success=False)
-        raise HTTPException(status_code=400, detail=f"OAuth failed: {str(e)}")
+        raise OAuthFailedException(detail=f"OAuth failed: {str(e)}")
 
-    user_info = token.get("userinfo")
-    if not user_info:
+    try:
+        user, access_token, refresh_token = await AuthService.handle_google_login(token)
+    except AuthException:
         log_login("unknown", ip=ip, success=False)
-        raise HTTPException(status_code=400, detail="Failed to get user info")
+        raise
 
-    email = user_info.get("email")
-    if not AuthService.is_allowed_email(email):
-        log_login(email, ip=ip, success=False)
-        raise InvalidEmailDomainException(settings.allowed_email_domain)
-
-    user = await AuthService.get_or_create_user(
-        google_id=user_info.get("sub"),
-        email=email,
-        name=user_info.get("name"),
-        picture=user_info.get("picture")
-    )
-
-    access_token, refresh_token = await AuthService.create_tokens(user)
-
-    log_login(email, ip=ip, success=True)
+    log_login(user.email, ip=ip, success=True)
 
     return TokenResponse(
         access_token=access_token,
@@ -94,17 +102,22 @@ async def google_callback(request: Request):
 
 # ==================== Token Management ====================
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    responses={
+        401: _error_responses[401],
+        404: _error_responses[404],
+        422: _error_responses[422],
+        429: _error_responses[429],
+        500: _error_responses[500],
+    },
+)
 async def refresh_token(body: RefreshRequest, request: Request):
     """Refresh token으로 새 토큰 발급"""
     rate_limiter.check_rate_limit(request, "token_refresh", **RateLimitConfig.TOKEN_ISSUE)
 
-    result = await AuthService.refresh_tokens(body.refresh_token)
-    if not result:
-        log_token_refresh("unknown", success=False)
-        raise InvalidCredentialsException("Invalid refresh token")
-
-    access_token, new_refresh_token = result
+    access_token, new_refresh_token = await AuthService.refresh_tokens(body.refresh_token)
     log_token_refresh("user", success=True)
 
     return TokenResponse(
@@ -114,7 +127,13 @@ async def refresh_token(body: RefreshRequest, request: Request):
     )
 
 
-@router.post("/logout")
+@router.post(
+    "/logout",
+    responses={
+        401: _error_responses[401],
+        500: _error_responses[500],
+    },
+)
 async def logout(
     request: Request,
     current_user: dict = Depends(get_current_user)
@@ -126,7 +145,15 @@ async def logout(
     return {"message": "Logged out", "revoked_tokens": count}
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    responses={
+        401: _error_responses[401],
+        404: _error_responses[404],
+        500: _error_responses[500],
+    },
+)
 async def get_me(current_user: UserInDB = Depends(get_current_user_db)):
     """현재 로그인한 유저 정보"""
     return UserResponse(
@@ -136,5 +163,3 @@ async def get_me(current_user: UserInDB = Depends(get_current_user_db)):
         picture=current_user.picture,
         role=current_user.role.value
     )
-
-

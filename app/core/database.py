@@ -17,8 +17,6 @@ async def connect_db():
     )
     # 유저 이메일 유니크 인덱스
     await db.users.create_index("email", unique=True)
-    # 클라이언트 client_id 유니크 인덱스
-    await db.clients.create_index("client_id", unique=True)
 
 
 async def close_db():

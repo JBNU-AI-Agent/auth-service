@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import jwt, JWTError
+from jose import jwt, JWTError, ExpiredSignatureError
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 import base64
 
 from app.config import settings
 from app.core.security import load_private_key, load_public_key
+from app.core.exceptions import InvalidCredentialsException, TokenExpiredException
 
 
 def create_access_token(
@@ -32,7 +33,8 @@ def create_access_token(
     return jwt.encode(payload, private_key, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> Optional[dict]:
+def decode_access_token(token: str) -> dict:
+    """Access token 디코딩. 실패 시 예외 발생."""
     try:
         public_key = load_public_key()
         payload = jwt.decode(
@@ -40,11 +42,15 @@ def decode_access_token(token: str) -> Optional[dict]:
             public_key,
             algorithms=[settings.jwt_algorithm]
         )
-        if payload.get("type") != "access":
-            return None
-        return payload
+    except ExpiredSignatureError:
+        raise TokenExpiredException()
     except JWTError:
-        return None
+        raise InvalidCredentialsException("Invalid or malformed token")
+
+    if payload.get("type") != "access":
+        raise InvalidCredentialsException("Invalid token type")
+
+    return payload
 
 
 def get_jwks() -> dict:

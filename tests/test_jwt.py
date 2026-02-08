@@ -1,12 +1,11 @@
 import pytest
-from datetime import timedelta
 
 from app.core.jwt import (
     create_access_token,
-    create_client_access_token,
     decode_access_token,
     get_jwks,
 )
+from app.core.exceptions import InvalidCredentialsException
 
 
 def test_create_access_token():
@@ -40,24 +39,9 @@ def test_decode_access_token():
 
 
 def test_decode_invalid_token():
-    """잘못된 토큰 디코딩 테스트"""
-    payload = decode_access_token("invalid_token")
-    assert payload is None
-
-
-def test_create_client_access_token():
-    """Client Access Token 생성 테스트"""
-    token = create_client_access_token(
-        client_id="client_123",
-        client_type="mcp_server",
-        scopes=["read", "write"]
-    )
-
-    assert token is not None
-
-    payload = decode_access_token(token)
-    # type이 다르므로 None 반환
-    assert payload is None
+    """잘못된 토큰 디코딩 시 예외 발생"""
+    with pytest.raises(InvalidCredentialsException):
+        decode_access_token("invalid_token")
 
 
 def test_get_jwks():

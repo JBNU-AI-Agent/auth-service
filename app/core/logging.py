@@ -36,17 +36,14 @@ def log_auth_event(
         "timestamp": datetime.utcnow().isoformat(),
         "success": success,
     }
-
-    if user_id:
-        log_data["user_id"] = user_id
-    if email:
-        log_data["email"] = email
-    if client_id:
-        log_data["client_id"] = client_id
-    if ip_address:
-        log_data["ip"] = ip_address
-    if detail:
-        log_data["detail"] = detail
+    optional = {
+        "user_id": user_id,
+        "email": email,
+        "client_id": client_id,
+        "ip": ip_address,
+        "detail": detail,
+    }
+    log_data.update({k: v for k, v in optional.items() if v is not None})
 
     if success:
         logger.info(f"AUTH: {log_data}")

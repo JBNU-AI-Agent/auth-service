@@ -8,6 +8,13 @@ from app.repositories.user import UserRepository
 from app.repositories.token import RefreshTokenRepository
 from app.core.jwt import create_access_token
 from app.core.security import generate_refresh_token, hash_token
+from app.core.exceptions import (
+    InvalidCredentialsException,
+    InvalidEmailDomainException,
+    TokenExpiredException,
+    UserInfoNotFoundException,
+    UserNotFoundException,
+)
 
 
 class AuthService:
@@ -15,6 +22,26 @@ class AuthService:
     def is_allowed_email(email: str) -> bool:
         """허용된 이메일 도메인인지 확인"""
         return email.endswith(f"@{settings.allowed_email_domain}")
+
+    @classmethod
+    async def handle_google_login(cls, token: dict) -> Tuple[UserInDB, str, str]:
+        """Google OAuth 콜백 처리: 유저 정보 검증 → 유저 생성/조회 → 토큰 발급"""
+        user_info = token.get("userinfo")
+        if not user_info:
+            raise UserInfoNotFoundException()
+
+        email = user_info.get("email")
+        if not cls.is_allowed_email(email):
+            raise InvalidEmailDomainException(settings.allowed_email_domain)
+
+        user = await cls.get_or_create_user(
+            google_id=user_info.get("sub"),
+            email=email,
+            name=user_info.get("name"),
+            picture=user_info.get("picture"),
+        )
+        access_token, refresh_token = await cls.create_tokens(user)
+        return user, access_token, refresh_token
 
     @classmethod
     async def get_or_create_user(
@@ -27,13 +54,13 @@ class AuthService:
         """Google 로그인 후 유저 조회 또는 생성"""
         user = await UserRepository.get_by_google_id(google_id)
         if user:
-            # 정보 업데이트
             if user.name != name or user.picture != picture:
-                user = await UserRepository.update(
+                updated = await UserRepository.update(
                     user.id,
                     name=name,
                     picture=picture
                 )
+                return updated or user
             return user
 
         # 신규 유저 생성
@@ -68,16 +95,17 @@ class AuthService:
         return access_token, refresh_token
 
     @classmethod
-    async def refresh_tokens(cls, refresh_token: str) -> Optional[Tuple[str, str]]:
-        """Refresh token으로 새 토큰 쌍 발급"""
+    async def refresh_tokens(cls, refresh_token: str) -> Tuple[str, str]:
+        """Refresh token으로 새 토큰 쌍 발급. 실패 시 예외 발생."""
         token_hash = hash_token(refresh_token)
         stored_token = await RefreshTokenRepository.get_by_token_hash(token_hash)
 
         if not stored_token:
-            return None
+            raise InvalidCredentialsException("Invalid refresh token")
 
         if stored_token.expires_at < datetime.utcnow():
-            return None
+            await RefreshTokenRepository.revoke(token_hash)
+            raise TokenExpiredException()
 
         # 기존 토큰 폐기
         await RefreshTokenRepository.revoke(token_hash)
@@ -85,7 +113,7 @@ class AuthService:
         # 유저 조회 후 새 토큰 발급
         user = await UserRepository.get_by_id(stored_token.user_id)
         if not user:
-            return None
+            raise UserNotFoundException()
 
         return await cls.create_tokens(user)
 
