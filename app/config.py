@@ -1,8 +1,10 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
     # MongoDB
     mongodb_uri: str
     mongodb_db_name: str = "authentic"
@@ -22,10 +24,6 @@ class Settings(BaseSettings):
     # Server
     allowed_email_domain: str = "jbnu.ac.kr"
     cors_origins: List[str] = ["http://localhost:3000"]
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 
 settings = Settings()

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from typing import Optional
 from datetime import datetime
 from enum import Enum
@@ -17,13 +17,12 @@ class UserBase(BaseModel):
 
 
 class UserInDB(UserBase):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str = Field(alias="_id")
     google_id: str
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        populate_by_name = True
 
 
 class UserCreate(BaseModel):

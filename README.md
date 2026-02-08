@@ -69,28 +69,48 @@ JWT 서명 알고리즘으로 RS256(비대칭키)을 사용합니다.
 ```
 authentic/
 ├── app/
-│   ├── main.py              # FastAPI 앱 진입점
-│   ├── config.py            # 환경 설정
+│   ├── main.py                # FastAPI 앱, 글로벌 예외 핸들러
+│   ├── config.py              # 환경 변수 설정 (Pydantic Settings)
 │   ├── core/
-│   │   ├── database.py      # MongoDB 연결
-│   │   ├── jwt.py           # JWT 발급/검증 (RS256)
-│   │   ├── security.py      # RSA 키 관리
-│   │   ├── dependencies.py  # FastAPI 의존성 주입
-│   │   ├── exceptions.py    # 커스텀 예외
-│   │   ├── logging.py       # 인증 이벤트 로깅
-│   │   └── rate_limit.py    # Rate Limiting
+│   │   ├── database.py        # MongoDB 연결 (Motor async)
+│   │   ├── jwt.py             # JWT 발급/검증 (RS256)
+│   │   ├── security.py        # RSA 키 관리, 토큰 해싱
+│   │   ├── dependencies.py    # FastAPI 의존성 (인증 미들웨어)
+│   │   ├── exceptions.py      # ErrorCode enum, 커스텀 예외 클래스
+│   │   ├── logging.py         # 구조화된 인증 이벤트 로깅
+│   │   └── rate_limit.py      # IP 기반 Rate Limiting
 │   ├── models/
-│   │   ├── user.py          # 유저 모델
-│   │   └── token.py         # 토큰 모델
-│   ├── repositories/        # DB 접근 (Repository 패턴)
+│   │   ├── user.py            # User 도메인 모델 (UserInDB, UserCreate)
+│   │   └── token.py           # RefreshToken 도메인 모델
+│   ├── repositories/
+│   │   ├── base.py            # BaseRepository (공통 CRUD, ObjectId 변환)
+│   │   ├── user.py            # UserRepository (조회, 생성, 수정)
+│   │   └── token.py           # RefreshTokenRepository (발급, 폐기)
 │   ├── routers/
-│   │   ├── auth.py          # 인증 API
-│   │   └── jwks.py          # JWKS API
-│   ├── schemas/             # Pydantic 스키마
-│   └── services/            # 비즈니스 로직
-├── keys/                    # RSA 키 쌍 (자동 생성, git 제외)
+│   │   ├── auth.py            # 인증 API 엔드포인트
+│   │   └── jwks.py            # JWKS 공개키 엔드포인트
+│   ├── schemas/
+│   │   └── auth.py            # API 요청/응답 스키마 (TokenResponse, ErrorResponse)
+│   └── services/
+│       └── auth.py            # 인증 비즈니스 로직 (OAuth, 토큰 관리)
+├── tests/
+│   ├── conftest.py            # 테스트 설정 (TestClient)
+│   ├── test_auth.py           # 인증 API 테스트
+│   ├── test_health.py         # 헬스체크 테스트
+│   ├── test_jwt.py            # JWT 발급/검증 테스트
+│   └── test_rate_limit.py     # Rate Limiting 테스트
+├── keys/                      # RSA 키 쌍 (자동 생성, git 제외)
+├── .env.example               # 환경 변수 템플릿
 ├── pyproject.toml
 └── uv.lock
+```
+
+### 레이어 구조
+
+```
+Router (HTTP 요청/응답) → Service (비즈니스 로직) → Repository (DB 접근)
+         ↓                        ↓                        ↓
+  요청 파싱, 응답 포맷팅      검증, 예외 발생          MongoDB CRUD
 ```
 
 ## API 엔드포인트
@@ -196,6 +216,86 @@ API 요청 제한이 적용됩니다:
 | 토큰 발급/갱신 | 분당 10회 |
 
 제한 초과 시 `429 Too Many Requests` 응답
+
+## 에러 처리
+
+모든 API 에러는 통일된 포맷으로 응답합니다.
+
+### 에러 응답 포맷
+
+```json
+{
+  "timestamp": "2025-01-15T12:00:00+00:00",
+  "path": "/auth/refresh",
+  "status": 401,
+  "code": "TOKEN_EXPIRED",
+  "message": "Token has expired",
+  "details": null
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `timestamp` | string | 에러 발생 시각 (ISO 8601) |
+| `path` | string | 요청 경로 |
+| `status` | int | HTTP 상태 코드 |
+| `code` | string | 머신 리더블 에러 코드 |
+| `message` | string | 사람이 읽을 수 있는 에러 메시지 |
+| `details` | object \| null | 추가 정보 (Validation 에러 시 필드별 오류) |
+
+### 에러 코드 목록
+
+| 코드 | HTTP 상태 | 설명 |
+|------|-----------|------|
+| `INVALID_CREDENTIALS` | 401 | 유효하지 않은 인증 정보 |
+| `TOKEN_EXPIRED` | 401 | 토큰 만료 |
+| `INSUFFICIENT_PERMISSION` | 403 | 권한 부족 |
+| `INVALID_EMAIL_DOMAIN` | 403 | 허용되지 않은 이메일 도메인 |
+| `USER_NOT_FOUND` | 404 | 사용자를 찾을 수 없음 |
+| `OAUTH_FAILED` | 400 | OAuth 인증 실패 |
+| `USER_INFO_NOT_FOUND` | 400 | OAuth 제공자에서 사용자 정보 조회 실패 |
+| `VALIDATION_ERROR` | 422 | 요청 유효성 검증 실패 |
+| `RATE_LIMIT_EXCEEDED` | 429 | 요청 제한 초과 |
+| `INTERNAL_ERROR` | 500 | 서버 내부 오류 |
+
+### Validation 에러
+
+요청 유효성 검증 실패 시 `details`에 필드별 오류가 포함됩니다:
+
+```json
+{
+  "timestamp": "2025-01-15T12:00:00+00:00",
+  "path": "/auth/refresh",
+  "status": 422,
+  "code": "VALIDATION_ERROR",
+  "message": "Request validation failed",
+  "details": {
+    "refresh_token": "Field required"
+  }
+}
+```
+
+### 예외 처리 구조
+
+3단계 글로벌 예외 핸들러로 모든 에러를 캐치합니다:
+
+```
+1. AuthException       → 커스텀 비즈니스 예외 (에러 코드 포함)
+2. RequestValidationError → Pydantic 유효성 검증 실패
+3. Exception           → 예상치 못한 서버 오류 (500)
+```
+
+클라이언트는 `code` 필드로 에러 종류를 구분할 수 있습니다:
+
+```python
+response = requests.post("/auth/refresh", json={"refresh_token": "..."})
+if response.status_code != 200:
+    error = response.json()
+    if error["code"] == "TOKEN_EXPIRED":
+        # 재로그인 유도
+    elif error["code"] == "INVALID_CREDENTIALS":
+        # 잘못된 토큰 처리
+```
 
 ## 사용 예시
 
