@@ -1,0 +1,40 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/authentic
+
+            git pull origin main
+
+            cat > .env << 'ENVEOF'
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            MONGODB_DB_NAME=${{ secrets.MONGODB_DB_NAME }}
+            GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+            GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+            GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }}
+            JWT_PRIVATE_KEY=${{ secrets.JWT_PRIVATE_KEY }}
+            JWT_PUBLIC_KEY=${{ secrets.JWT_PUBLIC_KEY }}
+            ALLOWED_EMAIL_DOMAIN=${{ secrets.ALLOWED_EMAIL_DOMAIN }}
+            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+            ENVEOF
+
+            docker compose up --build -d
+
+            sleep 5
+
+            curl -f http://localhost:8880/health || exit 1
