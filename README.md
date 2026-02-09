@@ -2,6 +2,10 @@
 
 FastAPI 기반 인증 서버. AI Agent/MCP 서버 인증용.
 
+- **서버**: http://authentic-jbnu.duckdns.org:8880
+- **로그인**: http://authentic-jbnu.duckdns.org:8880/auth/google
+- **API 문서**: http://authentic-jbnu.duckdns.org:8880/docs
+
 ## 주요 기능
 
 - **Google OAuth 로그인** (`@jbnu.ac.kr` 도메인만 허용)
@@ -192,8 +196,8 @@ awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' public.pem
 1. [Google Cloud Console](https://console.cloud.google.com/) 접속
 2. APIs & Services → Credentials → OAuth 2.0 Client ID 생성
 3. Authorized redirect URIs에 추가:
-   - `http://localhost:8000/auth/google/callback` (개발)
-   - `https://your-domain.com/auth/google/callback` (프로덕션)
+   - `http://localhost:8000/auth/google/callback` (로컬 개발)
+   - `http://authentic-jbnu.duckdns.org:8880/auth/google/callback` (EC2)
 
 ## 실행
 
