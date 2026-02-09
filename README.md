@@ -99,6 +99,11 @@ authentic/
 │   ├── test_health.py         # 헬스체크 테스트
 │   ├── test_jwt.py            # JWT 발급/검증 테스트
 │   └── test_rate_limit.py     # Rate Limiting 테스트
+├── .github/
+│   └── workflows/
+│       └── deploy.yml         # GitHub Actions CI/CD (EC2 자동 배포)
+├── Dockerfile                 # 컨테이너 이미지 빌드
+├── docker-compose.yml         # 컨테이너 오케스트레이션
 ├── keys/                      # RSA 키 쌍 (자동 생성, git 제외)
 ├── .env.example               # 환경 변수 템플릿
 ├── pyproject.toml
