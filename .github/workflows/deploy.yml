@@ -1,0 +1,66 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB_NAME: ${{ secrets.MONGODB_DB_NAME }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+          JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY }}
+          JWT_PUBLIC_KEY: ${{ secrets.JWT_PUBLIC_KEY }}
+          ALLOWED_EMAIL_DOMAIN: ${{ secrets.ALLOWED_EMAIL_DOMAIN }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: MONGODB_URI,MONGODB_DB_NAME,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,JWT_PRIVATE_KEY,JWT_PUBLIC_KEY,ALLOWED_EMAIL_DOMAIN,CORS_ORIGINS
+          script: |
+            set -e
+
+            cd ~/authentic
+            git fetch origin main
+            git reset --hard origin/main
+
+            JWT_PRIV_ESCAPED=$(printf '%s' "$JWT_PRIVATE_KEY" | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
+            JWT_PUB_ESCAPED=$(printf '%s' "$JWT_PUBLIC_KEY" | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
+
+            cat > .env << EOF
+            MONGODB_URI=${MONGODB_URI}
+            MONGODB_DB_NAME=${MONGODB_DB_NAME}
+            GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+            GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+            GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+            JWT_PRIVATE_KEY="${JWT_PRIV_ESCAPED}"
+            JWT_PUBLIC_KEY="${JWT_PUB_ESCAPED}"
+            ALLOWED_EMAIL_DOMAIN=${ALLOWED_EMAIL_DOMAIN}
+            CORS_ORIGINS=${CORS_ORIGINS}
+            EOF
+
+            docker compose up --build -d
+
+            docker image prune -f
+
+            for i in 1 2 3 4 5 6; do
+              sleep 5
+              if curl -sf http://localhost:8880/health; then
+                echo " Health check passed"
+                exit 0
+              fi
+              echo "Attempt $i failed, retrying..."
+            done
+            echo "Health check failed after 6 attempts"
+            docker compose logs --tail 30
+            exit 1
