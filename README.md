@@ -99,6 +99,11 @@ authentic/
 │   ├── test_health.py         # 헬스체크 테스트
 │   ├── test_jwt.py            # JWT 발급/검증 테스트
 │   └── test_rate_limit.py     # Rate Limiting 테스트
+├── .github/
+│   └── workflows/
+│       └── deploy.yml         # GitHub Actions CI/CD (EC2 자동 배포)
+├── Dockerfile                 # 컨테이너 이미지 빌드
+├── docker-compose.yml         # 컨테이너 오케스트레이션
 ├── keys/                      # RSA 키 쌍 (자동 생성, git 제외)
 ├── .env.example               # 환경 변수 템플릿
 ├── pyproject.toml
@@ -192,6 +197,8 @@ awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' public.pem
 
 ## 실행
 
+### 로컬 개발
+
 ```bash
 # 의존성 설치
 uv sync
@@ -205,6 +212,48 @@ open http://localhost:8000/docs
 # 테스트 실행
 uv run pytest tests/ -v
 ```
+
+### Docker
+
+```bash
+# 빌드 및 실행 (포트 8880)
+docker compose up --build -d
+
+# 로그 확인
+docker compose logs -f
+
+# 중지
+docker compose down
+```
+
+## 배포 (CI/CD)
+
+GitHub Actions를 통해 `main` 브랜치 push 시 AWS EC2에 자동 배포됩니다.
+
+### 배포 흐름
+
+```
+main push → GitHub Actions → SSH EC2 → git pull → .env 생성 → docker compose up --build -d → health check
+```
+
+### GitHub Secrets 설정
+
+GitHub 리포 → **Settings → Secrets and variables → Actions**에서 등록:
+
+| Secret | 설명 |
+|---|---|
+| `SSH_PRIVATE_KEY` | EC2 접속용 PEM 키 파일 내용 전체 |
+| `SSH_HOST` | EC2 퍼블릭 IP |
+| `SSH_USERNAME` | EC2 SSH 유저명 (`ubuntu`) |
+| `MONGODB_URI` | MongoDB Atlas 연결 문자열 |
+| `MONGODB_DB_NAME` | MongoDB 데이터베이스 이름 |
+| `GOOGLE_CLIENT_ID` | Google OAuth 클라이언트 ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth 클라이언트 시크릿 |
+| `GOOGLE_REDIRECT_URI` | OAuth 콜백 URL (`http://<EC2_IP>:8880/auth/google/callback`) |
+| `JWT_PRIVATE_KEY` | RSA 개인키 (PEM 형식) |
+| `JWT_PUBLIC_KEY` | RSA 공개키 (PEM 형식) |
+| `ALLOWED_EMAIL_DOMAIN` | 허용 이메일 도메인 |
+| `CORS_ORIGINS` | CORS 허용 출처 목록 |
 
 ## Rate Limiting
 
